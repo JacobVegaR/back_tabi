@@ -1,0 +1,40 @@
+Tras analizar en detalle el PDF técnico de requerimientos de la Plataforma Tabi (B2C Backend v1.0), he compilado la lista completa de lo que vas a necesitar implementar a medida que avances en el desarrollo para cumplir con el 100% de la especificación:
+
+1. Seguridad y Autenticación (Sección 10)
+Algoritmo de Tokens: Cambiar los JWT básicos a firmas RS256 (requiere llaves públicas/privadas RSA).
+Hash de contraseñas: Usar Argon2id (en lugar de algoritmos simples) para encriptar contraseñas de usuarios locales.
+Control de reintentos: Implementar rate limiting en endpoints de autenticación (máximo 5 intentos fallidos por IP en 15 minutos) usando SlowAPI y Redis.
+Sanitización de entradas: Instalar la librería bleach para limpiar cadenas de texto en Pydantic y prevenir ataques XSS.
+2. Estrategia de Idempotencia (Sección 15.3)
+Idempotency-Key: Todos los endpoints de creación de reservas y pagos deben requerir la cabecera Idempotency-Key (un UUID v4 generado por el cliente).
+El backend debe almacenar esta clave en Redis con un tiempo de vida (TTL) de 24 horas para evitar dobles reservas o cobros duplicados en caso de reintentos de red.
+3. Base de Datos Avanzada (Sección 7)
+Tipos de Datos:
+Usar identificadores UUID en lugar de enteros (int) para las claves primarias (id) de usuarios, restaurantes y reservas.
+Cambiar coordenadas a tipos PostGIS: GEOGRAPHY(Point, 4326) para búsquedas de restaurantes cercanos por distancia.
+Estrategia de Índices: Crear los índices requeridos:
+idx_restaurants_geo (índice GIST para geolocalización).
+idx_restaurants_fts (índice GIN para búsquedas de texto completo).
+Índices compuestos en reservas para optimizar el escaneo de expiración y conflictos de horarios.
+4. Ciclo de Vida y Tareas Celery (Secciones 5.3 y 15.1)
+Máquina de Estados de Reservas: Controlar los estados de las reservas: PENDING, CONFIRMED, CANCELLED, EXPIRED, NO_SHOW, COMPLETED.
+Tareas Programadas (Celery):
+Expiración de reservas: Tarea que corre cada 60s para liberar el espacio reservado (slot) si la reserva se quedó en PENDING por más de 15 minutos sin pagarse.
+Recordatorios: Enviar notificaciones 24 horas y 2 horas antes de la reserva.
+Actualización de ratings: Recalcular el promedio de estrellas del restaurante de manera asíncrona al enviar una reseña.
+5. Integraciones Externas (Sección 2.2)
+Social Login: Firebase Auth / Google OAuth.
+SMS & OTP: Twilio o AWS SNS para enviar códigos de verificación por celular.
+Correos: SendGrid para correos de confirmación.
+Pagos: Wompi, PSE o Stripe (gestión de cobros y webhooks de confirmación).
+Mapas: Google Maps API para geocodificación.
+Monitoreo: Sentry SDK para reportes de errores en producción.
+6. Pruebas y QA (Sección 13.2)
+Unitarias: pytest y pytest-asyncio con cobertura mínima del 85%.
+Integración: TestContainers para levantar bases de datos PostgreSQL y Redis temporales durante las pruebas.
+Validación de API: Schemathesis para verificar que los endpoints cumplen estrictamente con la especificación de OpenAPI.
+Carga: k6 o Locust para validar que el endpoint de reservas soporte la concurrencia requerida sin caídas.
+7. Infraestructura y DevOps (Sección 11 y 12)
+Alembic: Para gestionar las migraciones de la base de datos PostgreSQL de forma segura.
+Dockerfile y Manifiestos K8s: Para el despliegue automático del API y los workers de Celery en Google Kubernetes Engine (GKE).
+CI/CD: Pipelines de GitHub Actions para automatizar las pruebas estáticas (mypy, ruff), análisis de vulnerabilidades (snyk, trufflehog) y el build de imágenes Docker.
